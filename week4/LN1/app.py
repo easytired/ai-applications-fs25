@@ -8,9 +8,20 @@ from math import radians, cos, sin, asin, sqrt
 with open("apartment_price_model.pkl", mode="rb") as f:
     model = pickle.load(f)
 
-# Zurich city center coordinates
-zurich_center_lat = 47.3769
-zurich_center_lon = 8.5417
+# Define Zurich neighborhoods with their approximate coordinates and distances
+zurich_neighborhoods = {
+    "City Center (Altstadt)": {"lat": 47.3769, "lon": 8.5417, "distance": 0.0},
+    "Oerlikon": {"lat": 47.4111, "lon": 8.5458, "distance": 3.8},
+    "Altstetten": {"lat": 47.3908, "lon": 8.4889, "distance": 4.2},
+    "Wiedikon": {"lat": 47.3708, "lon": 8.5128, "distance": 2.3},
+    "Seefeld": {"lat": 47.3550, "lon": 8.5550, "distance": 2.7},
+    "Schwamendingen": {"lat": 47.4053, "lon": 8.5648, "distance": 3.5},
+    "Wollishofen": {"lat": 47.3517, "lon": 8.5304, "distance": 3.0},
+    "Enge": {"lat": 47.3656, "lon": 8.5267, "distance": 1.2},
+    "Fluntern": {"lat": 47.3797, "lon": 8.5611, "distance": 1.8},
+    "Hottingen": {"lat": 47.3683, "lon": 8.5584, "distance": 1.5},
+    "Custom Location": {"lat": 47.3769, "lon": 8.5417, "distance": 0.0}
+}
 
 # Function to calculate distance between two points using Haversine formula
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -26,9 +37,23 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     r = 6371  # Radius of earth in kilometers
     return c * r
 
-def predict_price(rooms, area, lat, lon, has_balcony, is_renovated):
-    # Calculate special feature: distance to city center
-    distance_to_center = haversine_distance(lat, lon, zurich_center_lat, zurich_center_lon)
+def predict_price(neighborhood, rooms, area, has_balcony, is_renovated, custom_lat=None, custom_lon=None):
+    # Get coordinates based on neighborhood selection
+    if neighborhood == "Custom Location" and custom_lat is not None and custom_lon is not None:
+        lat = custom_lat
+        lon = custom_lon
+    else:
+        lat = zurich_neighborhoods[neighborhood]["lat"]
+        lon = zurich_neighborhoods[neighborhood]["lon"]
+    
+    # Calculate distance to city center
+    zurich_center_lat = zurich_neighborhoods["City Center (Altstadt)"]["lat"]
+    zurich_center_lon = zurich_neighborhoods["City Center (Altstadt)"]["lon"]
+    
+    if neighborhood == "Custom Location" and custom_lat is not None and custom_lon is not None:
+        distance_to_center = haversine_distance(custom_lat, custom_lon, zurich_center_lat, zurich_center_lon)
+    else:
+        distance_to_center = zurich_neighborhoods[neighborhood]["distance"]
     
     # Default values for other features
     pop = 420217
@@ -65,6 +90,7 @@ def predict_price(rooms, area, lat, lon, has_balcony, is_renovated):
     # Format the result
     result = f"Predicted Monthly Rent: CHF {predicted_price:.0f}"
     result += f"\n\nProperty Details:"
+    result += f"\n- Location: {neighborhood}"
     result += f"\n- {rooms} rooms, {area} m²"
     result += f"\n- {distance_to_center:.2f} km from city center"
     result += f"\n- {'Has balcony' if has_balcony else 'No balcony'}"
@@ -72,35 +98,93 @@ def predict_price(rooms, area, lat, lon, has_balcony, is_renovated):
     
     return result
 
-# Create Gradio interface with fewer inputs
-demo = gr.Interface(
-    fn=predict_price,
-    inputs=[
-        gr.Number(label="Number of Rooms"),
-        gr.Number(label="Area (m²)"),
-        gr.Number(label="Latitude", value=47.3769),
-        gr.Number(label="Longitude", value=8.5417),
-        gr.Checkbox(label="Has Balcony"),
-        gr.Checkbox(label="Is Renovated"),
-    ],
-    outputs="text",
-    examples=[
-        [3.5, 75, 47.41106, 8.54654, True, True],
-        [2.0, 60, 47.37624, 8.52814, False, False],
-        [4.5, 120, 47.36368, 8.54678, True, False],
-    ],
-    title="Zurich Apartment Rent Prediction",
-    description="""
+# Function to update visibility of lat/lon inputs based on neighborhood selection
+def update_custom_location(neighborhood):
+    if neighborhood == "Custom Location":
+        return gr.update(visible=True), gr.update(visible=True)
+    else:
+        return gr.update(visible=False), gr.update(visible=False)
+
+# Function to reset all inputs to default values
+def reset_inputs():
+    return [
+        "City Center (Altstadt)",  # neighborhood
+        47.3769,                   # custom_lat
+        8.5417,                    # custom_lon
+        3.5,                       # rooms
+        75,                        # area
+        True,                      # has_balcony
+        False,                     # is_renovated
+        ""                         # clear output
+    ]
+
+# Create Gradio interface with neighborhood dropdown
+with gr.Blocks() as demo:
+    gr.Markdown("# Zurich Apartment Rent Prediction")
+    gr.Markdown("""
     This app predicts apartment rental prices in Zurich with a special feature: Distance to City Center.
     
     **Special Feature Description:**
-    The app automatically calculates the apartment's distance from Zurich city center using the Haversine formula.
+    The model automatically calculates how far the apartment is from Zurich city center.
     This distance is a critical factor in real estate pricing - properties closer to the city center typically
     command higher rents due to convenience and accessibility to urban amenities.
     
-    Simply enter the apartment's latitude and longitude, and the model will incorporate this distance
-    calculation to provide a more accurate rental price prediction.
-    """
-)
+    Simply select a neighborhood, and the app will use its distance from the city center to help
+    provide a more accurate rental price prediction.
+    """)
+    
+    with gr.Row():
+        with gr.Column():
+            neighborhood = gr.Dropdown(
+                label="Neighborhood", 
+                choices=list(zurich_neighborhoods.keys()),
+                value="City Center (Altstadt)"
+            )
+            custom_lat = gr.Number(label="Custom Latitude", value=47.3769, visible=False)
+            custom_lon = gr.Number(label="Custom Longitude", value=8.5417, visible=False)
+            rooms = gr.Number(label="Number of Rooms", value=3.5)
+            area = gr.Number(label="Area (m²)", value=75)
+            has_balcony = gr.Checkbox(label="Has Balcony", value=True)
+            is_renovated = gr.Checkbox(label="Is Renovated", value=False)
+            
+            with gr.Row():
+                submit_button = gr.Button("Submit")
+                clear_button = gr.Button("Clear")
+        
+        with gr.Column():
+            output = gr.Textbox(label="Output")
+    
+    # Connect the neighborhood dropdown to show/hide custom lat/lon
+    neighborhood.change(
+        fn=update_custom_location,
+        inputs=neighborhood,
+        outputs=[custom_lat, custom_lon]
+    )
+    
+    # Connect the submit button
+    submit_button.click(
+        fn=predict_price,
+        inputs=[neighborhood, rooms, area, has_balcony, is_renovated, custom_lat, custom_lon],
+        outputs=output
+    )
+    
+    # Connect the clear button
+    clear_button.click(
+        fn=reset_inputs,
+        inputs=None,
+        outputs=[neighborhood, custom_lat, custom_lon, rooms, area, has_balcony, is_renovated, output]
+    )
+    
+    # Add examples
+    gr.Examples(
+        examples=[
+            ["Oerlikon", 3.5, 75, True, True],
+            ["Seefeld", 2.0, 60, False, False],
+            ["Wiedikon", 4.5, 120, True, False],
+        ],
+        inputs=[neighborhood, rooms, area, has_balcony, is_renovated],
+        outputs=output,
+        fn=predict_price
+    )
 
 demo.launch()
