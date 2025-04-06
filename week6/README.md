@@ -17,3 +17,4 @@
 - It is **highly recommended** to use a **GPU instead of a CPU**, as training time is reduced by a factor of **24x** when using a GPU.
 
 
+## Did exercise from week 6
