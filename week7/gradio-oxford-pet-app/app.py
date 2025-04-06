@@ -2,7 +2,7 @@ import gradio as gr
 from transformers import pipeline
 
 # Load models
-vit_classifier = pipeline("image-classification", model="kuhs/vit-base-oxford-iiit-pets")
+vit_classifier = pipeline("image-classification", model="chrisis2/vit-base-oxford-iiit-pets")
 clip_detector = pipeline(model="openai/clip-vit-large-patch14", task="zero-shot-image-classification")
 
 labels_oxford_pets = [
